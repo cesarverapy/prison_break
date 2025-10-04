@@ -1,0 +1,4 @@
+tasks:
+  lavado_manos: "Lávate las manos en el lavabo"
+  recoger_meds: "Recoge la medicación del carro"
+  administrar: "Administra la medicación al paciente"
