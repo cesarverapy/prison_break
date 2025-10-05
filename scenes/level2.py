@@ -88,7 +88,7 @@ def make_ceiling(center: Vec3, w: float, d: float, thickness: float = 0.06):
         pass
     return e
 
-# ---------- Cortina (con modelos si existen, si no fallback plano) ----------
+# ---------- Curtain (with models if they exist, otherwise flat fallback) ----------
 def make_curtain(x: float, z: float, w=1.8, rot_y: float = 0):
     for p in ('models/curtain.glb', 'models/curtain.gltf', 'models/curtain.obj'):
         try:
@@ -100,7 +100,7 @@ def make_curtain(x: float, z: float, w=1.8, rot_y: float = 0):
             print('[MODEL] Cortina OK:', p)
             return curtain
         except Exception as e:
-            print('[MODEL] Cortina falló', p, '->', e)
+            print('[MODEL] Curtain failed', p, '->', e)
 
     tex = load_texture('textures/curtain.png')
     if not tex:
@@ -175,7 +175,7 @@ def spawn_table(pos: Vec3, rot_y: float = 0, scale: float = 1.0):
             print('[MODEL] Mesa OK:', path)
             return Entity(model=path, position=pos, rotation_y=rot_y, scale=scale, collider='box')
         except Exception as e:
-            print('[MODEL] Mesa falló', path, '->', e)
+            print('[MODEL] Table failed', path, '->', e)
 
     root = Entity(position=pos, rotation_y=rot_y, collider=None)
     col_top = color.rgb(170, 140, 100)
@@ -195,10 +195,10 @@ def spawn_table(pos: Vec3, rot_y: float = 0, scale: float = 1.0):
 def spawn_penguin(pos: Vec3, rot_y: float = 0, scale: float = 1.0):
     for path in ('models/penguin.glb', 'models/penguin.obj'):
         try:
-            print('[MODEL] Pingüino OK:', path)
+            print('[MODEL] Penguin OK:', path)
             return Entity(model=path, position=pos, rotation_y=rot_y, scale=scale, collider=None)
         except Exception as e:
-            print('[MODEL] Pingüino falló', path, '->', e)
+            print('[MODEL] Penguin failed', path, '->', e)
 
     p = Entity(position=pos, rotation_y=rot_y, collider=None)
     Entity(parent=p, model='sphere', color=color.rgb(30,30,30),
@@ -223,9 +223,9 @@ def distance_2d(a, b):
     bp = b if isinstance(b, Vec3) else b.position
     return (Vec2(ap.x, ap.z) - Vec2(bp.x, bp.z)).length()
 
-# ================== Interacción base ==================
+# ================== Base Interaction ==================
 class Interactable(Entity):
-    def __init__(self, prompt='E para interactuar', interact_distance=2.6, **kwargs):
+    def __init__(self, prompt='Press E to interact', interact_distance=2.6, **kwargs):
         kwargs.setdefault('collider', 'box')
         super().__init__(**kwargs)
         self.prompt = prompt
@@ -235,20 +235,20 @@ class Interactable(Entity):
         return self.enabled and distance_2d(self, who) <= self.interact_distance
     def on_interact(self, game): pass
 
-# ================== Ítems ==================
+# ================== Items ==================
 class ItemPickup(Interactable):
     MODEL_CFG = {
-        'guantes':   {'type': 'single', 'model': 'models/gloves.glb',  'y': 0.125, 'scale': 0.21, 'rot_y':  15},
-        'vendas':    {'type': 'single', 'model': 'models/band.glb',    'y': 0.110, 'scale': 0.01, 'rot_y': -10},
-        'torniquete':{'type': 'single', 'model': 'models/blood.glb',   'y': 0.050, 'scale': 1.0,  'rot_y':   0},
-        'jeringa':   {'type': 'parts',  'parts': [
+        'gloves':    {'type': 'single', 'model': 'models/gloves.glb',  'y': 0.125, 'scale': 0.21, 'rot_y':  15},
+        'bandages':  {'type': 'single', 'model': 'models/band.glb',    'y': 0.110, 'scale': 0.01, 'rot_y': -10},
+        'tourniquet':{'type': 'single', 'model': 'models/blood.glb',   'y': 0.050, 'scale': 1.0,  'rot_y':   0},
+        'syringe':   {'type': 'parts',  'parts': [
             'models/syringe_body.obj',
             'models/syringe_plunger.obj',
             'models/syringe_needle.obj'
         ], 'y': 0.10, 'scale': 1.0, 'rot_y': 30},
     }
     def __init__(self, item_id, **kwargs):
-        super().__init__(prompt='Pulsa E para recoger', **kwargs)
+        super().__init__(prompt='Press E to pick up', **kwargs)
         self.item_id = item_id
         self.visible = True
         self.collider = BoxCollider(self, center=Vec3(0, 0.15, 0), size=Vec3(0.6, 0.35, 0.6))
@@ -266,9 +266,9 @@ class ItemPickup(Interactable):
                     Entity(parent=group, model=m)
                 group.rotation_y = cfg.get('rot_y', 0)
             else:
-                raise FileNotFoundError('Sin cfg de modelo.')
+                raise FileNotFoundError('No model config found.')
         except Exception as ex:
-            print(f'[INFO] OBJ no cargado para "{item_id}" -> cubo. Detalle: {ex}')
+            print(f'[INFO] Model not loaded for "{item_id}" -> using cube fallback. Detail: {ex}')
             vis = Entity(parent=self, model='cube', y=0.13, scale=Vec3(0.35, 0.25, 0.35),
                          texture=T_WALL, color=color.white)
             _setup_tex_repeat(vis.texture)
@@ -280,17 +280,17 @@ class ItemPickup(Interactable):
         except: pass
         game.collect_item(self.item_id)
 
-# ---------- LAVABO (interactable) ----------
+# ---------- SINK (interactable) ----------
 class Sink(Interactable):
     def __init__(self, **kwargs):
-        super().__init__(prompt='Pulsa E para LAVARTE LAS MANOS', interact_distance=2.6, **kwargs)
+        super().__init__(prompt='Press E to WASH YOUR HANDS', interact_distance=2.6, **kwargs)
         # Intentar modelo 3D
         for p in ('models/sink.glb', 'models/sink.gltf', 'models/sink.obj'):
             try:
                 Entity(parent=self, model=p, collider=None, scale=1.0)
                 break
             except Exception as e:
-                print('[MODEL] Sink falló', p, '->', e)
+                print('[MODEL] Sink failed', p, '->', e)
         else:
             # Fallback geométrico: base + pileta + canilla
             base_w, base_d, base_h = 0.60, 0.42, 0.80
@@ -311,15 +311,15 @@ class Sink(Interactable):
     def on_interact(self, game):
         try: Audio('audio/water.wav').play()
         except: pass
-        print('[SINK] Te lavaste las manos')
+        print('[SINK] You washed your hands')
 
-# Helper: colocar lavabo “pegado” a una pared con leve offset y rotación correcta
+# Helper: place sink "attached" to a wall with slight offset and correct rotation
 def spawn_sink_on_wall(anchor: Vec3, facing: str = '+Z', height: float = 0.0, offset: float = 0.06) -> Sink:
     """
-    anchor: punto sobre la pared (x, y, z). Normalmente y=0 y height controla la altura.
-    facing: '+Z', '-Z', '+X', '-X' (hacia dónde mira el lavabo).
-    height: altura del origen (0=suelo). El lavabo centra su base según el modelo; 0.0 funciona bien.
-    offset: separación para que no se meta en la pared.
+    anchor: point on the wall (x, y, z). Normally y=0 and height controls the elevation.
+    facing: '+Z', '-Z', '+X', '-X' (direction the sink faces).
+    height: height of origin (0=floor). The sink centers its base according to the model; 0.0 works well.
+    offset: separation so it doesn't clip into the wall.
     """
     facing = facing.upper()
     rot_map = {'+Z':   0, '-Z': 180, '+X':  90, '-X': -90}
@@ -334,36 +334,36 @@ def spawn_reji(pos: Vec3, rot_y: float = 0,
                size=(0.30, 0.38), on_floor: bool = True, name: str = 'reji',
                scale_model: float = 0.06, force_fallback: bool = False,
                use_cube: bool = False, thickness: float = 0.02, lift: float = 0.01):
-    # normalizar size
+    # normalize size
     if isinstance(size, (list, tuple)) and len(size) >= 2:
         w, d = float(size[0]), float(size[1])
         if len(size) >= 3: thickness = float(size[2])
     else:
         w, d = 0.30, 0.38
 
-    # --- INTENTAR MODELO 3D ---
+    # --- TRY 3D MODEL ---
     if not force_fallback:
         for p in ('models/reji.glb','models/reji.gltf','models/reji.obj',
                   'models/grate.glb','models/grate.gltf','models/grate.obj'):
             try:
                 root = Entity(name=name, position=pos, rotation_y=rot_y)       # wrapper
                 mesh = Entity(parent=root, model=p, collider=None, scale=scale_model)
-                print('[REJI] usando modelo 3D con scale=', scale_model)
+                print('[GRATE] Using 3D model with scale=', scale_model)
 
                 if on_floor:
-                    # Alinear la parte inferior del modelo al piso (y = pos.y + lift)
+                    # Align the bottom of the model to the floor (y = pos.y + lift)
                     try:
                         mn, mx = mesh.get_tight_bounds()        # world coords (Point3)
                         desired_y = pos.y + lift
-                        mesh.y += (desired_y - mn.y)            # baja/sube el hijo hasta apoyar
+                        mesh.y += (desired_y - mn.y)            # raise/lower child until it rests
                     except Exception as e:
                         print('[REJI] bounds fail:', e)
                         mesh.y = lift
                 return root
             except Exception as ex:
-                print('[MODEL] Reji falló', p, '->', ex)
+                print('[MODEL] Grate failed', p, '->', ex)
 
-    # --- FALLBACK (panel plano o placa fina) ---
+    # --- FALLBACK (flat panel or thin plate) ---
     tex = load_texture('textures/reji.png') or load_texture('textures/grate.png')
     y = pos.y + (lift if on_floor else 0.0)
 
@@ -584,21 +584,21 @@ class Level2Scene(BaseScene):
 
         self.office_door = SlidingDoor(
             position=Vec3(office_x - 2.0, 0, 3.0),
-            width=1.2, theme='office', label_text='OFICINA', rotation_y=90
+            width=1.2, theme='office', label_text='OFFICE', rotation_y=90
         )
         self.entities.append(self.office_door)
 
-        # Ítems necesarios
-        self.items_needed = {'Guantes', 'Jeringa', 'Vendas'}
+        # Required items
+        self.items_needed = {'Gloves', 'Syringe', 'Bandages'}
         self.items_collected = set()
-        item1 = ItemPickup('Guantes', position=Vec3(7.3, 0.1, 4.6))
-        item2 = ItemPickup('Jeringa', position=Vec3(1.7, 0.1, 0.6))
-        item3 = ItemPickup('Vendas', position=Vec3(13.2, 0.1, 2.6))
+        item1 = ItemPickup('Gloves', position=Vec3(7.3, 0.1, 4.6))
+        item2 = ItemPickup('Syringe', position=Vec3(1.7, 0.1, 0.6))
+        item3 = ItemPickup('Bandages', position=Vec3(13.2, 0.1, 2.6))
         self.entities.extend([item1, item2, item3])
 
-        # Estación de torniquete
+        # Tourniquet station
         self.tourniquet_station = Interactable(
-            prompt='Pulsa E para aplicar torniquete',
+            prompt='Press E to apply tourniquet',
             position=Vec3(office_x, 1.2, 2.0),
             collider='box'
         )
@@ -612,7 +612,7 @@ class Level2Scene(BaseScene):
         # ADD RETURN DOOR to intralevel (at entrance)
         self.return_door = SlidingDoor(
             position=Vec3(24.0, 0, 3.0),
-            width=1.2, theme='exit', label_text='VOLVER', rotation_y=-90
+            width=1.2, theme='exit', label_text='RETURN', rotation_y=-90
         )
         self.return_door.tag = 'return_door'
         self.entities.append(self.return_door)
@@ -669,12 +669,12 @@ class Level2Scene(BaseScene):
         
         self.update_hud()
 
-    # --------- Cama (usa modelo si existe; si no, fallback cúbico) ---------
+    # --------- Bed (uses model if exists; otherwise, cubic fallback) ---------
     def _make_bed(self, pos: Vec3, rot_y: float = 0):
-        """Crea una cama en pos con rotación Y (grados)."""
-        root = Entity(position=pos, rotation_y=rot_y,scale=0.012)  # wrapper para rotar/posicionar todo
+        """Creates a bed at pos with Y rotation (degrees)."""
+        root = Entity(position=pos, rotation_y=rot_y,scale=0.012)  # wrapper to rotate/position everything
 
-        # Intentar modelos
+        # Try models
         for p in ('models/hospital_bed.glb', 'models/hospital_bed.gltf', 'models/hospital_bed.obj'):
             try:
                 Entity(parent=root, model=p, collider='box')
@@ -682,12 +682,12 @@ class Level2Scene(BaseScene):
                     BoxCollider(root, center=Vec3(0, 0.30, 0), size=Vec3(2.0, 0.6, 0.9))
                 except:
                     pass
-                print('[MODEL] Cama OK:', p)
+                print('[MODEL] Bed OK:', p)
                 return root
             except Exception as e:
-                print('[MODEL] Cama falló', p, '->', e)
+                print('[MODEL] Bed failed', p, '->', e)
 
-        # Fallback cúbico
+        # Cubic fallback
         bed_len, bed_w, base_h, mat_h = 2.0, 0.9, 0.18, 0.22
         Entity(parent=root, model='cube', texture=T_FRAME if T_FRAME else None,
                color=(color.white if T_FRAME else color.rgb(160,160,165)),
@@ -699,15 +699,15 @@ class Level2Scene(BaseScene):
                scale=Vec3(bed_len*0.98, mat_h, bed_w*0.98))
         return root
 
-    # --------- HUD / lógica ---------
+    # --------- HUD / Logic ---------
     def update_hud(self):
-        faltantes = self.items_needed - self.items_collected
+        missing = self.items_needed - self.items_collected
         got = len(self.items_collected)
         self.hud_text.text = (
-            f"Necesarios: {', '.join(self.items_needed)} | Tienes: {got}/3 | Faltan: {', '.join(faltantes)}"
-            if faltantes else f"Objetivo listo  Tienes: {', '.join(self.items_collected)}"
+            f"Required: {', '.join(self.items_needed)} | You have: {got}/3 | Missing: {', '.join(missing)}"
+            if missing else f"Objective complete - You have: {', '.join(self.items_collected)}"
         )
-        if not faltantes and not self.office_door._open:
+        if not missing and not self.office_door._open:
             self.office_door.open()
 
     def collect_item(self, item_id):
@@ -719,19 +719,19 @@ class Level2Scene(BaseScene):
             return
         if self.exit_wall:
             self.exit_wall.break_now()
-        self.exit_door = SlidingDoor(position=Vec3(0.0, 0.0, 3.0), width=1.2, theme='exit', label_text='SALIDA')
+        self.exit_door = SlidingDoor(position=Vec3(0.0, 0.0, 3.0), width=1.2, theme='exit', label_text='EXIT')
         self.exit_door.open()
 
     def _apply_tourniquet(self):
-        faltantes = self.items_needed - self.items_collected
-        if faltantes:
-            self.prompt_text.text = f"Faltan: {', '.join(faltantes)}"
+        missing = self.items_needed - self.items_collected
+        if missing:
+            self.prompt_text.text = f"Missing: {', '.join(missing)}"
             return
         self.tourniquet_done = True
         try: Audio('audio/success.wav').play()
         except: pass
-        self.hud_text.text = '✔ Torniquete aplicado — ¡SALIDA DESBLOQUEADA!'
-        self.prompt_text.text = 'Dirígete a la SALIDA'
+        self.hud_text.text = '✔ Tourniquet applied — EXIT UNLOCKED!'
+        self.prompt_text.text = 'Head to the EXIT'
         self._unlock_exit_wall()
 
     def _end(self, message: str, win: bool):
@@ -761,10 +761,10 @@ class Level2Scene(BaseScene):
 
         # Timer
         self.time_left = max(0.0, self.time_left - time.dt)
-        self.timer_text.text = f'Tiempo: {int(self.time_left + 0.99)}s'
+        self.timer_text.text = f'Time: {int(self.time_left + 0.99)}s'
         if self.time_left <= 0 and not self.tourniquet_done:
-            self.prompt_text.text = 'Has sangrado... GAME OVER'
-            self.hud_text.text = 'Reiniciando...'
+            self.prompt_text.text = 'You bled out... GAME OVER'
+            self.hud_text.text = 'Restarting...'
             self._end('GAME OVER', win=False)
             return
 
@@ -772,10 +772,10 @@ class Level2Scene(BaseScene):
         if self.return_door and self.player:
             dist = distance_2d(self.player.position, self.return_door.position)
             if dist <= self.interact_distance:
-                self.prompt_text.text = 'Presiona E para volver al área de prisión'
+                self.prompt_text.text = 'Press E to return to prison area'
                 return  # Don't check other interactions
 
-        # Interacciones
+        # Interactions
         target = next((e for e in self.entities if isinstance(e, Interactable) and e.can_interact(self.player)), None)
         self.prompt_text.text = (target.prompt if target else '')
         e_down = held_keys.get('e', False)
@@ -788,9 +788,9 @@ class Level2Scene(BaseScene):
         elif not e_down:
             self._pressing_e = False
 
-        # Victoria: cruzar la salida
+        # Victory: cross the exit
         if self.tourniquet_done and self.player.x < 0.6:
-            self._end('¡NIVEL COMPLETADO!', win=True)
+            self._end('LEVEL COMPLETED!', win=True)
     
     def input(self, key):
         """Handle input"""
