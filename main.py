@@ -1,20 +1,55 @@
 from ursina import *
-from ursina.prefabs.first_person_controller import FirstPersonController
+from ursina.shaders import lit_with_shadows_shader
+import random
+from scenes.scene_manager import SceneManager
+from scenes.level1 import Level1Scene
+
+# =========================
+# 1) APP INITIALIZATION
+# =========================
 
 app = Ursina()
 
-# set sky as background
-Sky(texture='sky_default')
+# Setup random seed for consistent behavior
+random.seed(0)
+Entity.default_shader = lit_with_shadows_shader
 
-# set ground
-ground = Entity(model='plane', scale=(100,1,100), texture='Prision_Cell/Ground.png', texture_scale=(10,10), collider='box')
-    
+# =========================
+# 2) SCENE MANAGEMENT
+# =========================
 
-# initialize camera at origin(player)
-camera.position = (0, 0, 0)
-camera.rotation = (0, 0, 0)
+# Create scene manager
+scene_manager = SceneManager()
+scene_manager.setup(app)
 
-# set first person
-player = FirstPersonController()
+# Register available scenes/levels
+scene_manager.register_scene('level1', Level1Scene)
+# TODO: Register more levels as they are created
+# scene_manager.register_scene('level2', Level2Scene)
+# scene_manager.register_scene('level3', Level3Scene)
 
-app.run()
+# =========================
+# 3) GLOBAL CALLBACKS
+# =========================
+
+def update():
+    """Global update callback"""
+    scene_manager.update()
+
+def input(key):
+    """Global input callback"""
+    scene_manager.input(key)
+
+# =========================
+# 4) GAME START
+# =========================
+
+# Load the first level
+scene_manager.load_scene('level1')
+
+# =========================
+# 5) RUN GAME
+# =========================
+
+if __name__ == "__main__":
+    app.run()
