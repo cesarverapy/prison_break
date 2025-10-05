@@ -8,6 +8,10 @@ from .base_scene import BaseScene
 class Level1Scene(BaseScene):
     """Level 1: Prison Cell Escape"""
     
+    def __init__(self, scene_manager=None):
+        super().__init__()
+        self.scene_manager = scene_manager
+    
     def setup(self):
         """Initialize Level 1 scene"""
         self.is_active = True
@@ -18,8 +22,6 @@ class Level1Scene(BaseScene):
         self._create_interactive_objects()
         self._create_systems()
         self._wire_up_systems()
-        
-        print("Level 1: Prison Cell Escape - Ready!")
     
     def _create_environment(self):
         """Create the prison cell environment"""
@@ -76,7 +78,7 @@ class Level1Scene(BaseScene):
         self.door.tag = 'door'
         self.entities.append(self.door)
         
-        self.rejila = Entity(model='cube', scale=(0.8, 0.05, 0.8), position=(-9, 0.025, 1.2), texture='metal.jpg', collider='box')
+        self.rejila = Entity(model='cube', scale=(0.8, 0.05, 0.8), position=(-9, 0.025, 1.2), texture='assets/textures/metal.jpg', collider='box')
         self.rejila.tag = 'vent'
         # Ventilation grate hinge to rotate like a lid
         self.rejila.origin = (-self.rejila.scale_x/2, 0, 0)
@@ -88,6 +90,13 @@ class Level1Scene(BaseScene):
         self.systems['ui'] = UIManager()
         self.systems['state'] = GameState()
         self.systems['anim'] = AnimationSystem()
+        
+        # Add UI and animation elements to entities list for proper cleanup
+        self.entities.append(self.systems['ui'].prompt)
+        self.entities.append(self.systems['ui'].msg)
+        self.entities.append(self.systems['ui'].banner)
+        self.entities.append(self.systems['anim'].fade_overlay)
+        
         self.systems['inter'] = InteractionSystem(
             player=self.player, 
             ui=self.systems['ui'], 
@@ -100,7 +109,8 @@ class Level1Scene(BaseScene):
             ui=self.systems['ui'], 
             state=self.systems['state'], 
             anim=self.systems['anim'], 
-            inter=self.systems['inter']
+            inter=self.systems['inter'],
+            scene=self
         )
         
         # Set up interaction system object references
@@ -325,7 +335,7 @@ class GameController:
     def instance():
         return GameController._inst
 
-    def __init__(self, player, pause_handler, ui: UIManager, state: GameState, anim: AnimationSystem, inter: InteractionSystem):
+    def __init__(self, player, pause_handler, ui: UIManager, state: GameState, anim: AnimationSystem, inter: InteractionSystem, scene=None):
         GameController._inst = self
         self.player = player
         self.pause_handler = pause_handler
@@ -333,6 +343,7 @@ class GameController:
         self.state = state
         self.anim = anim
         self.inter = inter
+        self.scene = scene
 
     def disable_controls(self):
         self.player.enabled = False
@@ -370,8 +381,41 @@ class GameController:
         self.disable_controls()
 
         # 1) Banner "Door opened…"
-        invoke(lambda: self.ui.show_banner('✅ Door opened! You managed to escape the cell.', 1.1), delay=0.05)
+        invoke(lambda: self.ui.show_banner('Door opened! You managed to escape the cell.', 1.1), delay=0.05)
         # 2) Banner "Level 1 completed"
-        invoke(lambda: self.ui.show_banner('🎉 Level 1 completed!', 1.3), delay=1.20)
-        # 3) Fade-out and final callback (closes app; change to next_level if you want)
-        invoke(lambda: self.anim.fade_to_black(duration=1.3, callback=lambda: application.quit()), delay=2.60)
+        invoke(lambda: self.ui.show_banner('Level 1 completed!', 1.3), delay=1.20)
+        # 3) Fade-out and transition to next level
+        invoke(lambda: self.anim.fade_to_black(duration=1.3, callback=self._transition_to_intralevel), delay=2.60)
+    
+    def _transition_to_intralevel(self):
+        """Transition from Level 1 to the intralevel (guard patrol scene)"""
+        # Destroy the fade overlay before transitioning
+        if self.scene and hasattr(self.scene, 'systems'):
+            anim_system = self.scene.systems.get('anim')
+            if anim_system and hasattr(anim_system, 'fade_overlay'):
+                overlay = anim_system.fade_overlay
+                overlay.enabled = False
+                overlay.visible = False
+                overlay.color = color.rgba(0, 0, 0, 0)
+                if hasattr(overlay, 'destroy'):
+                    overlay.destroy()
+        
+        # Disable old player controller
+        if self.scene and hasattr(self.scene, 'player'):
+            old_player = self.scene.player
+            old_player.enabled = False
+            old_player.gravity = 0
+            mouse.locked = False
+        
+        # Destroy all camera UI children
+        if hasattr(camera, 'ui') and camera.ui:
+            for child in list(camera.ui.children):
+                child.enabled = False
+                child.visible = False
+                if hasattr(child, 'destroy'):
+                    child.destroy()
+        
+        if self.scene and self.scene.scene_manager:
+            self.scene.scene_manager.load_scene('intralevel')
+        else:
+            application.quit()
