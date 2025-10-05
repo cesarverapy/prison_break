@@ -1,17 +1,17 @@
 from ursina import *
 from ursina.prefabs.first_person_controller import FirstPersonController
 from ursina.shaders import lit_with_shadows_shader
+from ursina import destroy
 import random
 from .base_scene import BaseScene
 
 
 class Level1Scene(BaseScene):
     """Level 1: Prison Cell Escape"""
-    
+
     def __init__(self, scene_manager=None):
         super().__init__()
         self.scene_manager = scene_manager
-    
     def setup(self):
         """Initialize Level 1 scene"""
         self.is_active = True
@@ -22,16 +22,20 @@ class Level1Scene(BaseScene):
         self._create_interactive_objects()
         self._create_systems()
         self._wire_up_systems()
-    
+        
+        print("Level 1: Prison Cell Escape - Ready!")
+        
+        # Show watcher's note introduction
+        self._show_introduction()
     def _create_environment(self):
         """Create the prison cell environment"""
         # Ground
-        ground = Entity(model='plane', collider='box', scale=64, texture='assets/textures/concrete.jpg', texture_scale=(4,4))
+        ground = Entity(model='plane', collider='box',position=(0,0,-4), scale=60, texture='assets/textures/floor.png', texture_scale=(5,4))
         self.entities.append(ground)
         
         # Walls - cell simulator
         # Wall Z=0 (front/interior): 
-        wall_1 = Entity(model='cube', collider='box', position=(-8,0,0), scale=(13,8.3,1), rotation=(0,0,0), texture='brick', texture_scale=(5,5))
+        wall_1 = Entity(model='cube', collider='box', position=(-8,0,0), scale=(13,8.3,1), rotation=(0,0,0), texture='assets/textures/walls.png', texture_scale=(4,1))
         self.entities.append(wall_1)
         
         # Wall Z=10 (back): 
@@ -39,55 +43,75 @@ class Level1Scene(BaseScene):
         self.entities.append(wall_2)
         
         # Wall X=-15 (left side):
-        wall_3 = Entity(model='cube', collider='box', position=(-15,0,5), scale=(1,8.3,11), rotation=(0,0,0), texture='brick', texture_scale=(5,5))
+        wall_3 = Entity(model='cube', collider='box', position=(-15,0,5), scale=(1,8.3,11), rotation=(0,0,0), texture='assets/textures/walls.png', texture_scale=(4,1))
         self.entities.append(wall_3)
         
         wall_4 = duplicate(wall_2, x=-2, z=5, rotation=(0, 90, 0))
         self.entities.append(wall_4)
         
         # Ceiling:
-        ceiling = Entity(model='cube', collider='box', position=(-8.5,4.6,5), scale=(14,1,11), rotation=(0,0,0), texture='brick', texture_scale=(5,5))
+        ceiling = Entity(model='cube', collider='box', position=(-8.5,4.6,5), scale=(14,1,11), rotation=(0,0,0), texture='assets/textures/walls.png', texture_scale=(3,1))
         self.entities.append(ceiling)
         
-        # Light/sky (simple)
+        # Basic lighting setup
+        # Simple directional light (like the original)
         sun = DirectionalLight()
-        sun.look_at(Vec3(1,-1,-1))
+        sun.look_at(Vec3(-1,-1,-1))
         self.entities.append(sun)
-        
-        sky = Sky()
-        self.entities.append(sky)
-    
+
+        # Cell static items
+
+        # Penguin
+        #penguin = Entity(model='assets/models/penguin.glb', collider='box', position=(-10, 0, 6), scale=(0.5, 0.5, 0.5), rotation=(0, 0, 0))
+        penguin = Entity(model='assets/models/penguin_plush.glb', collider='box', position=(-13, 0.2 ,9), scale=(0.5, 0.5, 0.5), rotation=(0, 0, 0))
+        self.entities.append(penguin)
+
+        poster1 = Entity(model='assets/models/science_poster.glb', collider='box', position=(-14.32, 2, 8), scale=(3, 3, 3), rotation=(0, -90, 0))
+        self.entities.append(poster1)
+ 
+
     def _create_player(self):
         """Create the player character"""
-        self.player = FirstPersonController(model='cube', position=(-8, 1, 5), color=color.orange, speed=8, collider='box')
+        self.player = FirstPersonController(model='cube',color= color.orange, position=(-10, 1, 5), speed=8, collider='box')
         self.player.collider = BoxCollider(self.player, Vec3(0,1,0), Vec3(1,2,1))
         self.entities.append(self.player)
     
     def _create_interactive_objects(self):
         """Create interactive objects in the scene"""
         # Dummy props logic
-        self.bed = Entity(model='cube', collider='box', scale=(3.9, 0.5 ,2), color=color.red, position=(-13.5, 0, 1))
+        self.bed = Entity(model='assets/models/bed.glb', collider='box', scale=(2, 1.3 ,2), position=(-13, 0, 2.25), rotation=(0,-180,0))
         self.bed.tag = 'bed'
         self.entities.append(self.bed)
         
-        self.sink = Entity(model='cube', collider='box', scale=(1,1,0.5), color=color.blue, position=(-4, 0, 0.9))
+        self.sink = Entity(model='assets/models/metal_sink.glb', collider='box', scale=(3.2,3.2,3.2), position=(-4, 1.05, 0.67), rotation=(0,-180,0))
         self.sink.tag = 'sink'
         self.entities.append(self.sink)
         
-        self.door = Entity(model='assets/models/door.glb', collider='box', scale=1.0, position=(-8, 0, 9.4), texture='assets/textures/metal.jpg', color=color.rgb(120, 120, 120))
+        self.door = Entity(model='assets/models/prison_door.glb', collider='box', scale=1.5, position=(-2.5, 1.6, 5), rotation=(-180,-270,180))
+        #self.door = Entity(model='assets/models/door_1.glb', collider='box', scale=1.0, position=(-8, 0, 9.4), texture='assets/textures/metal.jpg')
         self.door.tag = 'door'
         self.entities.append(self.door)
         
-        self.rejila = Entity(model='cube', scale=(0.8, 0.05, 0.8), position=(-9, 0.025, 1.2), texture='assets/textures/metal.jpg', collider='box')
+        #self.rejila = Entity(model='assets/models/grate.glb', scale=(0.3, 0.3, 0.3), position=(-9, 0.025, 1.2), texture='assets/textures/metal.jpg', collider='box')
+        self.rejila = Entity(model='assets/models/grate.glb', scale=(0.3, 0.3, 0.3), position=(-13, 0.025, 2.25), texture='assets/textures/metal.jpg', collider='box')
         self.rejila.tag = 'vent'
         # Ventilation grate hinge to rotate like a lid
         self.rejila.origin = (-self.rejila.scale_x/2, 0, 0)
         self.entities.append(self.rejila)
+
+        self.watch = Entity(model='assets/models/watch.glb', collider='box', scale=(1, 1, 1), position=(-6.2, 0, 2), rotation=(0, 0, 0))
+        self.watch.tag = 'watch'
+        self.entities.append(self.watch)
+
+        self.poster2 = Entity(model='assets/models/poster_five.glb', collider='box', scale=(0.5, 0, 0.5), position=(-10, 0.2, 3), rotation=(0, 45, 0))
+        self.poster2.tag = 'poster'
+        self.entities.append(self.poster2)
     
     def _create_systems(self):
         """Create game systems"""
         # Create systems
         self.systems['ui'] = UIManager()
+        self.systems['narrative'] = NarrativeManager()
         self.systems['state'] = GameState()
         self.systems['anim'] = AnimationSystem()
         
@@ -113,11 +137,16 @@ class Level1Scene(BaseScene):
             scene=self
         )
         
+        # Set the narrative system reference
+        self.systems['controller'].narrative = self.systems['narrative']
+        
         # Set up interaction system object references
         self.systems['inter'].bed = self.bed
         self.systems['inter'].sink = self.sink
         self.systems['inter'].vent = self.rejila
         self.systems['inter'].door = self.door
+        self.systems['inter'].watch = self.watch
+        self.systems['inter'].poster = self.poster2
     
     def _wire_up_systems(self):
         """Wire up systems and create pause handler"""
@@ -126,19 +155,39 @@ class Level1Scene(BaseScene):
             if key == 'tab':    # press tab to toggle edit/play mode
                 editor_camera = Entity(name='editor_camera', enabled=False, ignore_paused=True)
                 editor_camera.enabled = not editor_camera.enabled
-                
+
                 self.player.visible_self = editor_camera.enabled
                 self.player.cursor.enabled = not editor_camera.enabled
                 mouse.locked = not editor_camera.enabled
                 editor_camera.position = self.player.position
-                
+
                 application.paused = editor_camera.enabled
-        
+
         self.pause_handler = Entity(ignore_paused=True, input=pause_input)
         self.entities.append(self.pause_handler)
         
         # Set pause handler in controller
         self.systems['controller'].pause_handler = self.pause_handler
+    
+    def _show_introduction(self):
+        """Show the watcher's note introduction"""
+        watcher_note = """
+Prisoner, you have been assigned to Cell Block A.
+
+Your objective is simple:
+- Find the key hidden in this cell
+- Something about the laundry room
+- Something about the outside
+- Do not attempt to escape through other means
+
+Look carefully.
+
+Good luck. You'll need it.
+
+- W"""
+        
+        # Show the note with typewriter effect
+        self.systems['narrative'].show_watcher_note(watcher_note)
     
     def update(self):
         """Update scene logic"""
@@ -233,11 +282,104 @@ class UIManager:
         self.banner.enabled = True
         invoke(setattr, self.banner, 'enabled', False, delay=duration)
 
+class NarrativeManager:
+    
+    def __init__(self):
+        self.note_overlay = None
+        self.note_text = None
+        self.is_showing_note = False
+        self.typewriter_speed = 0.05  # seconds per character
+        self.auto_dismiss_time = 15.0  # seconds
+    
+    def show_watcher_note(self, text, on_complete=None):
+        if self.is_showing_note:
+            return
+        
+        self.is_showing_note = True
+        
+        # Create note background (paper texture)
+        self.note_overlay = Entity(
+            parent=camera.ui,
+            model='quad',
+            color=color.rgb(245, 235, 200),  # Old paper color
+            scale=(2, 2),
+            z=-0.8
+        )
+        
+        # Create note text
+        self.note_text = Text(
+            '',
+            parent=camera.ui,
+            origin=(0, 0),
+            position=(0, 0),
+            scale=1.5,
+            color=color.black,
+            font='VeraMono.ttf',
+            z=-0.9
+        )
+        
+        # Start typewriter effect
+        self._typewriter_effect(text, on_complete)
+    
+    def _typewriter_effect(self, text, on_complete):
+        current_text = ""
+        char_index = 0
+        
+        def add_character():
+            nonlocal current_text, char_index
+            if char_index < len(text):
+                current_text += text[char_index]
+                self.note_text.text = current_text
+                char_index += 1
+                invoke(add_character, delay=self.typewriter_speed)
+            else:
+                # Typewriter complete, start auto-dismiss timer
+                invoke(self._auto_dismiss, delay=self.auto_dismiss_time)
+                if on_complete:
+                    on_complete()
+        
+        # Start typewriter effect
+        invoke(add_character, delay=0.5)  # Small delay before starting
+    
+    def _auto_dismiss(self):
+        self.dismiss_note()
+    
+    def dismiss_note(self):
+        # dim (si lo usás)
+        if hasattr(self, 'dim') and self.dim:
+            destroy(self.dim)          
+            self.dim = None
+
+        if self.note_overlay:
+            destroy(self.note_overlay) 
+            self.note_overlay = None
+
+        if self.note_text:
+            destroy(self.note_text)    
+            self.note_text = None
+
+        self.is_showing_note = False
+
+        # callback de cierre si existe
+        if getattr(self, '_on_close', None):
+            self._on_close()
+            self._on_close = None
+    
+    def handle_input(self, key):
+        """Handle input for note interaction"""
+        if self.is_showing_note and key:
+            # Any key press dismisses the note
+            self.dismiss_note()
+            return True
+        return False
+
 class GameState:
     def __init__(self):
         self.has_key = False
         self.level_completed = False
         self.is_fading = False
+        #
+        self.injured = False
     
     def reset(self):
         self.has_key = False
@@ -256,12 +398,16 @@ class InteractionSystem:
         # messages
         self.msg_bed  = ['Just dust and old springs.', 'Nothing useful here…', 'Firm bed, but not the exit.']
         self.msg_sink = ['Feels hollow behind, but I can\'t move it.', 'Rusty and noisy. Better not force it.', 'Doesn\'t seem like the exit…']
+        self.msg_watch = ['Looks like a regular watch.', 'Hey, a watch!', 'It looks familiar...']
+        self.msg_poster = ['It\'s a poster about science.', 'Why is this poster here?', 'Wow, my favorite game!']
 
         # entity hooks (assigned from outside)
         self.bed = None
         self.sink = None
         self.vent = None
         self.door = None
+        self.watch = None
+        self.poster = None
 
     def _nearest(self, entities):
         best_e, best_d = None, 9999
@@ -277,7 +423,7 @@ class InteractionSystem:
             self.ui.hide_prompt()
             return
 
-        ents = [e for e in (self.bed, self.sink, self.vent, self.door) if e is not None]
+        ents = [e for e in (self.bed, self.sink, self.vent, self.door, self.watch, self.poster) if e is not None]
         tgt = self._nearest(ents)
         self.current = tgt
 
@@ -287,13 +433,17 @@ class InteractionSystem:
 
         tag = getattr(tgt, 'tag', None)
         if tag == 'bed':
-            self.ui.show_prompt('E: Check under the bed')
+            self.ui.show_prompt('E: Move the bed')
         elif tag == 'sink':
             self.ui.show_prompt('E: Inspect the sink')
         elif tag == 'vent':
             self.ui.show_prompt('E: Pry the grate')
         elif tag == 'door':
             self.ui.show_prompt('E: Try to open the door')
+        elif tag == 'watch':
+            self.ui.show_prompt('E: Inspect the watch')
+        elif tag == 'poster':
+            self.ui.show_prompt('E: Inspect the poster')
         else:
             self.ui.hide_prompt()
 
@@ -301,10 +451,16 @@ class InteractionSystem:
         """Call from input('e')."""
         if application.paused or self.state.is_fading or self.current is None:
             return
+
         tag = getattr(self.current, 'tag', None)
 
         if tag == 'bed':
-            self.ui.show_feedback(random.choice(self.msg_bed))
+            # Move the bed to reveal the grate
+            self.ui.show_feedback('Moved the bed! I can see something underneath...')
+            
+            # Move bed instantly
+            self.bed.position += Vec3(0, 0.1, -1.5)
+            self.bed.rotation += Vec3(0, 15, 0)
             return
 
         if tag == 'sink':
@@ -312,21 +468,40 @@ class InteractionSystem:
             return
 
         if tag == 'vent':
+            # lógica de la herida
+            if not self.state.injured:
+                self.state.injured = True
+                self.ui.show_feedback('Ouch... I got injured!')
+                try:
+                    VFX.injury_flash()
+                    VFX.spawn_blood_decal(self.player.position)
+                except:
+                    pass
+
+            # lógica de la llave
             if not self.state.has_key:
                 self.state.has_key = True
                 self.ui.show_feedback('Got the key!')
                 try:
-                    # simple lid animation
-                    self.current.animate_rotation_z(-85, duration=.35, curve=curve.out_cubic)
+                    self.vent.animate_rotation_z(-85, duration=.35, curve=curve.out_cubic)
                 except:
                     pass
             else:
                 self.ui.show_feedback('I already have the key.')
             return
 
+        if tag == 'watch':
+            self.ui.show_feedback(random.choice(self.msg_watch))
+            return
+        
+        if tag == 'poster':
+            self.ui.show_feedback(random.choice(self.msg_poster))
+            return
+
         if tag == 'door':
             GameController.instance().open_door_sequence()
             return
+    
 
 class GameController:
     """Orchestrates: blocks controls, runs sequences, and delegates to systems."""
@@ -361,8 +536,16 @@ class GameController:
         # update systems
         self.anim.update()
         self.inter.update()
-
+        try:
+            VFX.update()
+        except:
+            pass
+        
     def input(self, key):
+        # Check if narrative is showing and handle input
+        # primero deja que la narrativa consuma la tecla si está abierta
+        if hasattr(self, 'narrative') and self.narrative and self.narrative.handle_input(key):
+            return
         if key == 'e':
             self.inter.on_interact()
 
@@ -385,7 +568,11 @@ class GameController:
         # 2) Banner "Level 1 completed"
         invoke(lambda: self.ui.show_banner('Level 1 completed!', 1.3), delay=1.20)
         # 3) Fade-out and transition to next level
-        invoke(lambda: self.anim.fade_to_black(duration=1.3, callback=self._transition_to_intralevel), delay=2.60)
+        invoke(self._fade_and_transition, delay=2.60)
+    
+    def _fade_and_transition(self):
+        """Fade to black and transition to intralevel"""
+        self.anim.fade_to_black(duration=1.3, callback=self._transition_to_intralevel)
     
     def _transition_to_intralevel(self):
         """Transition from Level 1 to the intralevel (guard patrol scene)"""
@@ -419,3 +606,52 @@ class GameController:
             self.scene.scene_manager.load_scene('intralevel')
         else:
             application.quit()
+
+class VFX:
+    overlay = Entity(parent=camera.ui, model='quad', color=color.rgba(255,0,0,0), scale=2, z=-0.88, enabled=True)
+    t = 0.0
+    dur = 1
+    active = False
+
+    @classmethod
+    def injury_flash(cls):
+        cls.t = 0.2
+        cls.active = True
+        cls.overlay.color = color.rgba(255,0,0,180)  # rojo semi
+        Audio('assets/audio/ouch.wav', loop=False, autoplay=True, volume=8)
+
+        # Texto grande en pantalla
+        txt = Text('I HURT MYSELF!', origin=(0,0), scale=2, color=color.white, y=0.1, z=-0.9)
+        # Lo eliminamos después de 1.2s
+        invoke(destroy, txt, delay=1.2)
+
+    @classmethod
+    def update(cls):
+        if not cls.active:
+            return
+        cls.t += time.dt
+        # Lerp de alpha a 0
+        k = max(0.0, 1.0 - cls.t/cls.dur)
+        a = int(180 * k)
+        cls.overlay.color = color.rgba(255,0,0,a)
+        if cls.t >= cls.dur:
+            cls.overlay.color = color.rgba(255,0,0,0)
+            cls.active = False
+            
+    @staticmethod
+    def spawn_blood_decal(pos):
+        for i in range(5):
+            # Create blood decal with delay
+            invoke(VFX._create_blood_decal, pos + Vec3(0, 0.01, 0), delay=i * 0.1)
+    
+    @staticmethod
+    def _create_blood_decal(pos):
+        """Create a single blood decal entity"""
+        Entity(
+            parent=scene,
+            model='quad',
+            texture='assets/textures/blood_decal.png',
+            position=pos,
+            rotation=(90,0,0),
+            scale=2
+        )
