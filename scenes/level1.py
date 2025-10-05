@@ -8,11 +8,10 @@ from .base_scene import BaseScene
 
 class Level1Scene(BaseScene):
     """Level 1: Prison Cell Escape"""
-    
+
     def __init__(self, scene_manager=None):
         super().__init__()
         self.scene_manager = scene_manager
-
     def setup(self):
         """Initialize Level 1 scene"""
         self.is_active = True
@@ -28,7 +27,6 @@ class Level1Scene(BaseScene):
         
         # Show watcher's note introduction
         self._show_introduction()
-        
     def _create_environment(self):
         """Create the prison cell environment"""
         # Ground
@@ -62,9 +60,6 @@ class Level1Scene(BaseScene):
         self.entities.append(sun)
 
         # Cell static items
-        # Shelf on the wall in front of the bed
-        shelf = Entity(model='assets/models/shelf.glb', collider='box', position=(-8, 2.5, 0.2), scale=(0, 0, 0), rotation=(0, 0, 0))
-        self.entities.append(shelf)
 
         # Penguin
         #penguin = Entity(model='assets/models/penguin.glb', collider='box', position=(-10, 0, 6), scale=(0.5, 0.5, 0.5), rotation=(0, 0, 0))
@@ -97,8 +92,8 @@ class Level1Scene(BaseScene):
         self.door.tag = 'door'
         self.entities.append(self.door)
         
-        #self.rejila = Entity(model='assets/models/grate.glb', scale=(0.3, 0.3, 0.3), position=(-9, 0.025, 1.2), texture='metal.jpg', collider='box')
-        self.rejila = Entity(model='assets/models/grate.glb', scale=(0.3, 0.3, 0.3), position=(-13, 0.025, 2.25), texture='metal.jpg', collider='box')
+        #self.rejila = Entity(model='assets/models/grate.glb', scale=(0.3, 0.3, 0.3), position=(-9, 0.025, 1.2), texture='assets/textures/metal.jpg', collider='box')
+        self.rejila = Entity(model='assets/models/grate.glb', scale=(0.3, 0.3, 0.3), position=(-13, 0.025, 2.25), texture='assets/textures/metal.jpg', collider='box')
         self.rejila.tag = 'vent'
         # Ventilation grate hinge to rotate like a lid
         self.rejila.origin = (-self.rejila.scale_x/2, 0, 0)
@@ -119,6 +114,13 @@ class Level1Scene(BaseScene):
         self.systems['narrative'] = NarrativeManager()
         self.systems['state'] = GameState()
         self.systems['anim'] = AnimationSystem()
+        
+        # Add UI and animation elements to entities list for proper cleanup
+        self.entities.append(self.systems['ui'].prompt)
+        self.entities.append(self.systems['ui'].msg)
+        self.entities.append(self.systems['ui'].banner)
+        self.entities.append(self.systems['anim'].fade_overlay)
+        
         self.systems['inter'] = InteractionSystem(
             player=self.player, 
             ui=self.systems['ui'], 
@@ -132,8 +134,11 @@ class Level1Scene(BaseScene):
             state=self.systems['state'], 
             anim=self.systems['anim'], 
             inter=self.systems['inter'],
-            narrative=self.systems['narrative']
+            scene=self
         )
+        
+        # Set the narrative system reference
+        self.systems['controller'].narrative = self.systems['narrative']
         
         # Set up interaction system object references
         self.systems['inter'].bed = self.bed
@@ -505,7 +510,7 @@ class GameController:
     def instance():
         return GameController._inst
 
-    def __init__(self, player, pause_handler, ui: UIManager, state: GameState, anim: AnimationSystem, inter: InteractionSystem, narrative):
+    def __init__(self, player, pause_handler, ui: UIManager, state: GameState, anim: AnimationSystem, inter: InteractionSystem, scene=None):
         GameController._inst = self
         self.player = player
         self.pause_handler = pause_handler
@@ -513,7 +518,7 @@ class GameController:
         self.state = state
         self.anim = anim
         self.inter = inter
-        self.narrative = narrative
+        self.scene = scene
 
     def disable_controls(self):
         self.player.enabled = False
@@ -539,7 +544,7 @@ class GameController:
     def input(self, key):
         # Check if narrative is showing and handle input
         # primero deja que la narrativa consuma la tecla si está abierta
-        if self.narrative and self.narrative.handle_input(key):
+        if hasattr(self, 'narrative') and self.narrative and self.narrative.handle_input(key):
             return
         if key == 'e':
             self.inter.on_interact()
@@ -562,8 +567,45 @@ class GameController:
         invoke(lambda: self.ui.show_banner('Door opened! You managed to escape the cell.', 1.1), delay=0.05)
         # 2) Banner "Level 1 completed"
         invoke(lambda: self.ui.show_banner('Level 1 completed!', 1.3), delay=1.20)
-        # 3) Fade-out and final callback (closes app; change to next_level if you want)
-        invoke(lambda: self.anim.fade_to_black(duration=1.3, callback=lambda: application.quit()), delay=2.60)
+        # 3) Fade-out and transition to next level
+        invoke(self._fade_and_transition, delay=2.60)
+    
+    def _fade_and_transition(self):
+        """Fade to black and transition to intralevel"""
+        self.anim.fade_to_black(duration=1.3, callback=self._transition_to_intralevel)
+    
+    def _transition_to_intralevel(self):
+        """Transition from Level 1 to the intralevel (guard patrol scene)"""
+        # Destroy the fade overlay before transitioning
+        if self.scene and hasattr(self.scene, 'systems'):
+            anim_system = self.scene.systems.get('anim')
+            if anim_system and hasattr(anim_system, 'fade_overlay'):
+                overlay = anim_system.fade_overlay
+                overlay.enabled = False
+                overlay.visible = False
+                overlay.color = color.rgba(0, 0, 0, 0)
+                if hasattr(overlay, 'destroy'):
+                    overlay.destroy()
+        
+        # Disable old player controller
+        if self.scene and hasattr(self.scene, 'player'):
+            old_player = self.scene.player
+            old_player.enabled = False
+            old_player.gravity = 0
+            mouse.locked = False
+        
+        # Destroy all camera UI children
+        if hasattr(camera, 'ui') and camera.ui:
+            for child in list(camera.ui.children):
+                child.enabled = False
+                child.visible = False
+                if hasattr(child, 'destroy'):
+                    child.destroy()
+        
+        if self.scene and self.scene.scene_manager:
+            self.scene.scene_manager.load_scene('intralevel')
+        else:
+            application.quit()
 
 class VFX:
     overlay = Entity(parent=camera.ui, model='quad', color=color.rgba(255,0,0,0), scale=2, z=-0.88, enabled=True)
@@ -576,7 +618,7 @@ class VFX:
         cls.t = 0.2
         cls.active = True
         cls.overlay.color = color.rgba(255,0,0,180)  # rojo semi
-        Audio('assets/sounds/ouch.wav', loop=False, autoplay=True, volume=8)
+        Audio('assets/audio/ouch.wav', loop=False, autoplay=True, volume=8)
 
         # Texto grande en pantalla
         txt = Text('I HURT MYSELF!', origin=(0,0), scale=2, color=color.white, y=0.1, z=-0.9)
@@ -613,4 +655,3 @@ class VFX:
             rotation=(90,0,0),
             scale=2
         )
-        #color=color.rgba(255,255,255,220),
