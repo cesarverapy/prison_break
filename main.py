@@ -3,6 +3,7 @@ from ursina.shaders import lit_with_shadows_shader
 import random
 from scenes.scene_manager import SceneManager
 from scenes.level1 import Level1Scene
+from scenes.intralevel import IntralevelScene
 
 # =========================
 # 1) APP INITIALIZATION
@@ -24,9 +25,7 @@ scene_manager.setup(app)
 
 # Register available scenes/levels
 scene_manager.register_scene('level1', Level1Scene)
-# TODO: Register more levels as they are created
-# scene_manager.register_scene('level2', Level2Scene)
-# scene_manager.register_scene('level3', Level3Scene)
+scene_manager.register_scene('intralevel', IntralevelScene)
 
 # =========================
 # 3) GLOBAL CALLBACKS

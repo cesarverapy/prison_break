@@ -20,19 +20,30 @@ class SceneManager:
     def load_scene(self, scene_name):
         """Load a scene by name"""
         if scene_name not in self.scenes:
-            print(f"Scene '{scene_name}' not found!")
             return
         
-        # Clean up current scene
+        # Cleanup current scene
         if self.current_scene:
+            # Destroy all entities
+            for entity in self.current_scene.entities:
+                try:
+                    if entity and hasattr(entity, 'destroy'):
+                        entity.destroy()
+                    elif entity and hasattr(entity, 'disable'):
+                        entity.disable()
+                except Exception:
+                    pass
+            
             self.current_scene.cleanup()
+            self.current_scene = None
         
         # Create and initialize new scene
         scene_class = self.scenes[scene_name]
-        self.current_scene = scene_class()
+        try:
+            self.current_scene = scene_class(scene_manager=self)
+        except TypeError:
+            self.current_scene = scene_class()
         self.current_scene.setup()
-        
-        print(f"Loaded scene: {scene_name}")
     
     def update(self):
         """Update current scene"""
