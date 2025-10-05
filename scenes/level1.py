@@ -75,6 +75,15 @@ class Level1Scene(BaseScene):
         self.player = FirstPersonController(model='cube',color= color.orange, position=(-10, 1, 5), speed=8, collider='box')
         self.player.collider = BoxCollider(self.player, Vec3(0,1,0), Vec3(1,2,1))
         self.entities.append(self.player)
+        
+        # Reset camera to default state (important for scene transitions)
+        camera.position = (0, 0, 0)
+        camera.rotation = (0, 0, 0)
+        camera.clip_plane_near = 0.1
+        camera.clip_plane_far = 1000
+        
+        # Enable mouse lock
+        mouse.locked = True
     
     def _create_interactive_objects(self):
         """Create interactive objects in the scene"""
@@ -191,13 +200,25 @@ Good luck. You'll need it.
     
     def update(self):
         """Update scene logic"""
-        if self.is_active and self.systems['controller']:
-            self.systems['controller'].update()
+        if not self.is_active:
+            return
+        
+        try:
+            if self.systems.get('controller'):
+                self.systems['controller'].update()
+        except:
+            pass
     
     def input(self, key):
         """Handle input"""
-        if self.is_active and self.systems['controller']:
-            self.systems['controller'].input(key)
+        if not self.is_active:
+            return
+        
+        try:
+            if self.systems.get('controller'):
+                self.systems['controller'].input(key)
+        except:
+            pass
 
 
 # =========================
@@ -266,21 +287,37 @@ class UIManager:
         self.banner = Text('', origin=(0,0), position=(0,0.25), scale=1.2, background=True, enabled=False)
     
     def show_prompt(self, text):
-        self.prompt.text = text
-        self.prompt.enabled = True
+        if self.prompt and hasattr(self.prompt, 'enabled'):
+            try:
+                self.prompt.text = text
+                self.prompt.enabled = True
+            except:
+                pass
     
     def hide_prompt(self):
-        self.prompt.enabled = False
+        if self.prompt and hasattr(self.prompt, 'enabled'):
+            try:
+                self.prompt.enabled = False
+            except:
+                pass
 
     def show_feedback(self, text, duration=1.2):
-        self.msg.text = text
-        self.msg.enabled = True
-        invoke(setattr, self.msg, 'enabled', False, delay=duration)
+        if self.msg and hasattr(self.msg, 'enabled'):
+            try:
+                self.msg.text = text
+                self.msg.enabled = True
+                invoke(setattr, self.msg, 'enabled', False, delay=duration)
+            except:
+                pass
     
     def show_banner(self, text, duration=1.2):
-        self.banner.text = text
-        self.banner.enabled = True
-        invoke(setattr, self.banner, 'enabled', False, delay=duration)
+        if self.banner and hasattr(self.banner, 'enabled'):
+            try:
+                self.banner.text = text
+                self.banner.enabled = True
+                invoke(setattr, self.banner, 'enabled', False, delay=duration)
+            except:
+                pass
 
 class NarrativeManager:
     
@@ -423,7 +460,14 @@ class InteractionSystem:
             self.ui.hide_prompt()
             return
 
-        ents = [e for e in (self.bed, self.sink, self.vent, self.door, self.watch, self.poster) if e is not None]
+        # Safety check: ensure entities still exist and are valid
+        try:
+            ents = [e for e in (self.bed, self.sink, self.vent, self.door, self.watch, self.poster) 
+                    if e is not None and hasattr(e, 'world_position')]
+        except:
+            self.ui.hide_prompt()
+            return
+        
         tgt = self._nearest(ents)
         self.current = tgt
 
@@ -533,9 +577,19 @@ class GameController:
             self.pause_handler.enabled = True
 
     def update(self):
-        # update systems
-        self.anim.update()
-        self.inter.update()
+        # update systems with safety checks
+        try:
+            if self.anim:
+                self.anim.update()
+        except:
+            pass
+        
+        try:
+            if self.inter:
+                self.inter.update()
+        except:
+            pass
+        
         try:
             VFX.update()
         except:
@@ -576,32 +630,14 @@ class GameController:
     
     def _transition_to_intralevel(self):
         """Transition from Level 1 to the intralevel (guard patrol scene)"""
-        # Destroy the fade overlay before transitioning
-        if self.scene and hasattr(self.scene, 'systems'):
-            anim_system = self.scene.systems.get('anim')
-            if anim_system and hasattr(anim_system, 'fade_overlay'):
-                overlay = anim_system.fade_overlay
-                overlay.enabled = False
-                overlay.visible = False
-                overlay.color = color.rgba(0, 0, 0, 0)
-                if hasattr(overlay, 'destroy'):
-                    overlay.destroy()
-        
-        # Disable old player controller
+        # Disable player
         if self.scene and hasattr(self.scene, 'player'):
-            old_player = self.scene.player
-            old_player.enabled = False
-            old_player.gravity = 0
-            mouse.locked = False
+            self.scene.player.enabled = False
+            self.scene.player.gravity = 0
         
-        # Destroy all camera UI children
-        if hasattr(camera, 'ui') and camera.ui:
-            for child in list(camera.ui.children):
-                child.enabled = False
-                child.visible = False
-                if hasattr(child, 'destroy'):
-                    child.destroy()
+        mouse.locked = False
         
+        # Transition to intralevel
         if self.scene and self.scene.scene_manager:
             self.scene.scene_manager.load_scene('intralevel')
         else:
@@ -629,13 +665,22 @@ class VFX:
     def update(cls):
         if not cls.active:
             return
-        cls.t += time.dt
-        # Lerp de alpha a 0
-        k = max(0.0, 1.0 - cls.t/cls.dur)
-        a = int(180 * k)
-        cls.overlay.color = color.rgba(255,0,0,a)
-        if cls.t >= cls.dur:
-            cls.overlay.color = color.rgba(255,0,0,0)
+        
+        # Safety check: ensure overlay still exists
+        if not cls.overlay or not hasattr(cls.overlay, 'color'):
+            cls.active = False
+            return
+        
+        try:
+            cls.t += time.dt
+            # Lerp de alpha a 0
+            k = max(0.0, 1.0 - cls.t/cls.dur)
+            a = int(180 * k)
+            cls.overlay.color = color.rgba(255,0,0,a)
+            if cls.t >= cls.dur:
+                cls.overlay.color = color.rgba(255,0,0,0)
+                cls.active = False
+        except:
             cls.active = False
             
     @staticmethod

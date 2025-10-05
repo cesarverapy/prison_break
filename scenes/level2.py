@@ -4,34 +4,27 @@ from ursina import *
 from ursina.prefabs.first_person_controller import FirstPersonController
 from ursina import application
 from panda3d.core import AntialiasAttrib
-
-# --- configurar carpeta de assets ANTES de cargar texturas ---
-application.asset_folder = Path(__file__).parent.resolve()
-print('[ASSETS]', application.asset_folder)
-# --- fin ---
+from .base_scene import BaseScene
 
 # ================== Assets ==================
-T_WALL     = load_texture('textures/wall_base.png')
-T_FLOOR    = load_texture('textures/floor_tile.png')
-T_MATTRESS = load_texture('textures/mattress.png')
-T_FRAME    = load_texture('textures/bed_frame.png')
+T_WALL = None
+T_FLOOR = None
+T_MATTRESS = None
+T_FRAME = None
+T_DOOR_PANEL = None
+T_DOOR_FRAME = None
 
-# Texturas nuevas para la puerta (si faltan, usamos colores)
-T_DOOR_PANEL  = load_texture('textures/door_panel_metal.png') or None
-T_DOOR_FRAME  = load_texture('textures/door_frame_metal.png') or None
+def _load_level2_assets():
+    """Load level2 specific assets"""
+    global T_WALL, T_FLOOR, T_MATTRESS, T_FRAME, T_DOOR_PANEL, T_DOOR_FRAME
+    
+    T_WALL = load_texture('assets/textures/walls.png')
+    T_FLOOR = load_texture('assets/textures/floor_tile.png')
+    T_MATTRESS = load_texture('assets/textures/mattress.png') if Path('assets/textures/mattress.png').exists() else None
+    T_FRAME = load_texture('assets/textures/bed_frame.png') if Path('assets/textures/bed_frame.png').exists() else None
+    T_DOOR_PANEL = load_texture('assets/textures/door_panel_metal.png') if Path('assets/textures/door_panel_metal.png').exists() else None
+    T_DOOR_FRAME = load_texture('assets/textures/door_frame_metal.png') if Path('assets/textures/door_frame_metal.png').exists() else None
 
-if not T_WALL:     print('[WARN] Falta textures/wall_base.png')
-if not T_FLOOR:    print('[WARN] Falta textures/floor_tile.png')
-if not T_MATTRESS: print('[WARN] Falta textures/mattress.png (ok)')
-if not T_FRAME:    print('[WARN] Falta textures/bed_frame.png (ok)')
-
-# Filtros globales
-try:
-    from ursina import Texture
-    Texture.default_filtering  = 'mipmap'
-    Texture.default_anisotropy = 16
-except Exception:
-    pass
 
 # ================== Constantes ==================
 WALL_H     = 3.0
@@ -506,36 +499,67 @@ class BreakableWall(Interactable):
 
 
 
-# ================== Juego ==================
-class Game:
-    def __init__(self):
+# ================== Level 2 Scene ==================
+class Level2Scene(BaseScene):
+    """Level 2: Medical Bay - Apply tourniquet and escape"""
+    
+    def __init__(self, scene_manager=None):
+        super().__init__()
+        self.scene_manager = scene_manager
+        self.player = None
+        self.exit_door = None
+        self.return_door = None  # Door to go back to intralevel
+        self.is_transitioning = False
+        self.interact_distance = 2.6
+    
+    def setup(self):
+        """Initialize Level 2 scene"""
+        self.is_active = True
+        
+        # Load assets
+        _load_level2_assets()
+        
+        # Create environment and game elements
+        self._setup_game()
+    
+    def _setup_game(self):
+        """Set up all game elements"""
         # Pasillo principal
-        make_floor(Vec3(12, 0, 3), 24, 6, repeat=(8, 4))
-        make_ceiling(Vec3(12, 0, 3), 24, 6)
-        spawn_wheelchair(Vec3(22.8, 0.9, 1.6), rot_y=20, scale=0.8)
-        spawn_penguin(Vec3(22.8, 0.9, 1.6), rot_y=60, scale=0.3)
-        spawn_sink_on_wall(Vec3(7.0, 1.5, 1.70), facing='-Z', height=0.8, offset=0.07)
+        floor1 = make_floor(Vec3(12, 0, 3), 24, 6, repeat=(8, 4))
+        ceiling1 = make_ceiling(Vec3(12, 0, 3), 24, 6)
+        wheelchair = spawn_wheelchair(Vec3(22.8, 0.9, 1.6), rot_y=20, scale=0.8)
+        penguin = spawn_penguin(Vec3(22.8, 0.9, 1.6), rot_y=60, scale=0.3)
+        sink = spawn_sink_on_wall(Vec3(7.0, 1.5, 1.70), facing='-Z', height=0.8, offset=0.07)
+        
+        self.entities.extend([floor1, ceiling1, wheelchair, penguin, sink])
 
         # Perímetro superior e inferior
-        make_wall(Vec3(12.0, 0, 0.0), Vec3(24.0, WALL_H, WALL_THICK))
-        make_wall(Vec3(12.0, 0, 6.0), Vec3(24.0, WALL_H, WALL_THICK))
+        wall1 = make_wall(Vec3(12.0, 0, 0.0), Vec3(24.0, WALL_H, WALL_THICK))
+        wall2 = make_wall(Vec3(12.0, 0, 6.0), Vec3(24.0, WALL_H, WALL_THICK))
+        self.entities.extend([wall1, wall2])
 
         self.rejis = [
             spawn_reji(Vec3(6.0, 0.0, 2.3),  rot_y=0,  on_floor=True,  name='reji', scale_model=0.0018),
             spawn_reji(Vec3(12.0, 0.0, 3.7), rot_y=90, on_floor=True,  name='reji', scale_model=0.0029),
         ]
+        self.entities.extend(self.rejis)
 
-        spawn_reji(Vec3(24.0, 1.2, 3.0), rot_y=90, size=(0.16, 0.16), on_floor=False, name='reji', scale_model=0.008)
+        reji_wall = spawn_reji(Vec3(24.0, 1.2, 3.0), rot_y=90, size=(0.16, 0.16), on_floor=False, name='reji', scale_model=0.008)
+        self.entities.append(reji_wall)
 
         # Perímetro derecho (x=24)
-        make_wall(Vec3(24.0, 0, 3.0), Vec3(WALL_THICK, WALL_H, 6.0))
+        wall3 = make_wall(Vec3(24.0, 0, 3.0), Vec3(WALL_THICK, WALL_H, 6.0))
+        self.entities.append(wall3)
 
         # Perímetro izquierdo (x=0) con hueco central para salida (1.2 m)
         door_width = 1.2
-        make_wall(Vec3(0.0, 0, 1.2), Vec3(WALL_THICK, WALL_H, 2.4))
-        make_wall(Vec3(0.0, 0, 4.8), Vec3(WALL_THICK, WALL_H, 2.4))
+        wall4 = make_wall(Vec3(0.0, 0, 1.2), Vec3(WALL_THICK, WALL_H, 2.4))
+        wall5 = make_wall(Vec3(0.0, 0, 4.8), Vec3(WALL_THICK, WALL_H, 2.4))
+        self.entities.extend([wall4, wall5])
+        
         self.exit_wall = BreakableWall(size=Vec3(WALL_THICK, WALL_H, door_width),
                                        position=Vec3(0.0, 0.0, 3.0))
+        self.entities.append(self.exit_wall)
 
         # Cubículos (posiciones + rotación de camas)
         BEDS = [
@@ -544,29 +568,33 @@ class Game:
             (Vec3(13.0, 0.09, 2), 180),
         ]
         for pos, rot in BEDS:
-            make_wall(Vec3(pos.x, 0, 0.7), Vec3(3.6, WALL_H, WALL_THICK))
-            self._make_bed(pos, rot_y=rot)    
+            wall = make_wall(Vec3(pos.x, 0, 0.7), Vec3(3.6, WALL_H, WALL_THICK))
+            bed = self._make_bed(pos, rot_y=rot)
+            self.entities.extend([wall, bed])
 
-                # Oficina
+        # Oficina
         office_x = 19.0
-        make_floor  (Vec3(office_x, 0, 1.0), 4.0, 6.0)
-        make_ceiling(Vec3(office_x, 0, 1.0), 4.0, 6.0)
-        make_wall(Vec3(office_x,      0, -2.0), Vec3(4.0, WALL_H, WALL_THICK))
-        make_wall(Vec3(office_x - 2.0, 0, 1.2), Vec3(WALL_THICK, WALL_H, 2.4))
-        make_wall(Vec3(office_x - 2.0, 0, 4.8), Vec3(WALL_THICK, WALL_H, 2.4))
-        make_wall(Vec3(office_x + 2.0, 0, 0.6), Vec3(WALL_THICK, WALL_H, 6.0))
+        floor2 = make_floor(Vec3(office_x, 0, 1.0), 4.0, 6.0)
+        ceiling2 = make_ceiling(Vec3(office_x, 0, 1.0), 4.0, 6.0)
+        wall6 = make_wall(Vec3(office_x, 0, -2.0), Vec3(4.0, WALL_H, WALL_THICK))
+        wall7 = make_wall(Vec3(office_x - 2.0, 0, 1.2), Vec3(WALL_THICK, WALL_H, 2.4))
+        wall8 = make_wall(Vec3(office_x - 2.0, 0, 4.8), Vec3(WALL_THICK, WALL_H, 2.4))
+        wall9 = make_wall(Vec3(office_x + 2.0, 0, 0.6), Vec3(WALL_THICK, WALL_H, 6.0))
+        self.entities.extend([floor2, ceiling2, wall6, wall7, wall8, wall9])
 
         self.office_door = SlidingDoor(
             position=Vec3(office_x - 2.0, 0, 3.0),
             width=1.2, theme='office', label_text='OFICINA', rotation_y=90
         )
+        self.entities.append(self.office_door)
 
         # Ítems necesarios
-        self.items_needed    = {'Guantes', 'Jeringa', 'Vendas'}
+        self.items_needed = {'Guantes', 'Jeringa', 'Vendas'}
         self.items_collected = set()
-        ItemPickup('Guantes', position=Vec3(7.3, 0.1, 4.6))
-        ItemPickup('Jeringa', position=Vec3(1.7, 0.1, 0.6))
-        ItemPickup('Vendas',  position=Vec3(13.2, 0.1, 2.6))
+        item1 = ItemPickup('Guantes', position=Vec3(7.3, 0.1, 4.6))
+        item2 = ItemPickup('Jeringa', position=Vec3(1.7, 0.1, 0.6))
+        item3 = ItemPickup('Vendas', position=Vec3(13.2, 0.1, 2.6))
+        self.entities.extend([item1, item2, item3])
 
         # Estación de torniquete
         self.tourniquet_station = Interactable(
@@ -574,37 +602,72 @@ class Game:
             position=Vec3(office_x, 1.2, 2.0),
             collider='box'
         )
-        spawn_table(Vec3(office_x, 0.091, 2.0), rot_y=90, scale=1.1)
-        Entity(parent=self.tourniquet_station, model='models/blood.glb', y=0.01, scale=1.0, rotation_y=0)
+        table = spawn_table(Vec3(office_x, 0.091, 2.0), rot_y=90, scale=1.1)
+        blood_model = Entity(parent=self.tourniquet_station, model='assets/models/blood.glb', y=0.01, scale=1.0, rotation_y=0)
         self.tourniquet_station.collider = BoxCollider(self.tourniquet_station,
                                                        center=Vec3(0, 0.15, 0), size=Vec3(0.9, 0.3, 0.9))
+        self.entities.extend([self.tourniquet_station, table])
         self.tourniquet_done = False
-        self.exit_door = None
 
-        # Player
-        self.player = FirstPersonController(position=Vec3(2.2, 1.2, 3), speed=5, jump_height=0.55)
+        # ADD RETURN DOOR to intralevel (at entrance)
+        self.return_door = SlidingDoor(
+            position=Vec3(24.0, 0, 3.0),
+            width=1.2, theme='exit', label_text='VOLVER', rotation_y=-90
+        )
+        self.return_door.tag = 'return_door'
+        self.entities.append(self.return_door)
+
+        # Player - spawn INSIDE the medical bay (past the entrance door)
+        self.player = FirstPersonController(position=Vec3(10.0, 1.2, 3), speed=5, jump_height=0.55)
         self.player.collider = BoxCollider(self.player, center=Vec3(0, 1, 0), size=Vec3(0.6, 1.9, 0.6))
+        self.player.rotation_y = -90  # Face toward the main hallway (away from entrance door)
+        self.player.gravity = 1
+        self.player.enabled = True
+        self.entities.append(self.player)
 
-        # Cámara y AA
-        camera.rotation_y = 90
-        camera.clip_plane_near = 0.3
-        camera.clip_plane_far  = 80
-        application.base.render.setAntialias(AntialiasAttrib.MMultisample)
+        # Reset camera to default state
+        camera.position = (0, 0, 0)
+        camera.rotation = (0, 0, 0)
+        camera.clip_plane_near = 0.1
+        camera.clip_plane_far = 1000
+        
+        # Enable mouse lock for FPS control
+        mouse.locked = True
+        
+        try:
+            application.base.render.setAntialias(AntialiasAttrib.MMultisample)
+        except:
+            pass
 
         # HUD
-        window.title = 'Enfermería — Salida tras torniquete'
+        window.title = 'Medical Bay - Apply tourniquet and escape'
         window.color = color.rgb(10, 10, 10)
-        self.hud_text    = Text(text='', origin=(-.5, .5), x=-.87, y=.45, scale=1)
-        self.timer_text  = Text(text='', origin=( .5, .5), x= .85, y=.45, scale=1)
-        self.prompt_text = Text(text='', origin=(0,   -.5), y=-.42, scale=1)
+        self.hud_text = Text(text='', origin=(-.5, .5), x=-.87, y=.45, scale=1)
+        self.timer_text = Text(text='', origin=(.5, .5), x=.85, y=.45, scale=1)
+        self.prompt_text = Text(text='', origin=(0, -.5), y=-.42, scale=1)
+        self.entities.extend([self.hud_text, self.timer_text, self.prompt_text])
+
+        # Fade overlay for transitions
+        self.fade_overlay = Entity(
+            parent=camera.ui,
+            model='quad',
+            color=color.rgba(0, 0, 0, 255),  # Start black
+            scale=2,
+            z=-0.9,
+            enabled=True
+        )
+        self.entities.append(self.fade_overlay)
+        
+        # Fade in from black at start
+        self.fade_overlay.animate_color(color.rgba(0, 0, 0, 0), duration=1.0, curve=curve.in_out_sine)
 
         self.time_left = 30.0
         self.game_over = False
-        self.victory   = False
+        self.victory = False
         self._pressing_e = False
-        self._center_text = None  # mensaje final
-
-        application.base.taskMgr.add(self.update)
+        self._center_text = None
+        
+        self.update_hud()
 
     # --------- Cama (usa modelo si existe; si no, fallback cúbico) ---------
     def _make_bed(self, pos: Vec3, rot_y: float = 0):
@@ -671,34 +734,49 @@ class Game:
         self.prompt_text.text = 'Dirígete a la SALIDA'
         self._unlock_exit_wall()
 
-    # ---- FIN DURO (cierra el juego) ----
     def _end(self, message: str, win: bool):
+        """End game with message"""
         self.game_over = not win
         self.victory = win
-        try: self.player.enabled = False
-        except: pass
-        if self._center_text: destroy(self._center_text)
+        
+        if self.player:
+            self.player.enabled = False
+        
+        if self._center_text:
+            destroy(self._center_text)
+        
         self._center_text = Text(
             text=message, origin=(0,0), scale=2,
             color=color.green if win else color.red, background=True
         )
         invoke(application.quit, delay=2)
 
-    def update(self, task):
-        if self.game_over or self.victory:
-            return task.cont
+    def update(self):
+        """Update scene logic"""
+        if not self.is_active:
+            return
+        
+        if self.game_over or self.victory or self.is_transitioning:
+            return
 
-        # Tiempo
+        # Timer
         self.time_left = max(0.0, self.time_left - time.dt)
         self.timer_text.text = f'Tiempo: {int(self.time_left + 0.99)}s'
         if self.time_left <= 0 and not self.tourniquet_done:
             self.prompt_text.text = 'Has sangrado... GAME OVER'
             self.hud_text.text = 'Reiniciando...'
             self._end('GAME OVER', win=False)
-            return task.cont
+            return
+
+        # Check proximity to return door
+        if self.return_door and self.player:
+            dist = distance_2d(self.player.position, self.return_door.position)
+            if dist <= self.interact_distance:
+                self.prompt_text.text = 'Presiona E para volver al área de prisión'
+                return  # Don't check other interactions
 
         # Interacciones
-        target = next((e for e in scene.entities if isinstance(e, Interactable) and e.can_interact(self.player)), None)
+        target = next((e for e in self.entities if isinstance(e, Interactable) and e.can_interact(self.player)), None)
         self.prompt_text.text = (target.prompt if target else '')
         e_down = held_keys.get('e', False)
         if target and e_down and not getattr(self, '_pressing_e', False):
@@ -713,15 +791,59 @@ class Game:
         # Victoria: cruzar la salida
         if self.tourniquet_done and self.player.x < 0.6:
             self._end('¡NIVEL COMPLETADO!', win=True)
-
-        return task.cont
-
-
-# ================== main ==================
-def main():
-    app = Ursina()
-    Game()
-    app.run()
-
-if __name__ == '__main__':
-    main()
+    
+    def input(self, key):
+        """Handle input"""
+        if not self.is_active:
+            return
+        
+        # Return to intralevel
+        if key == 'e' and not self.is_transitioning and self.return_door and self.player:
+            dist = distance_2d(self.player.position, self.return_door.position)
+            if dist <= self.interact_distance:
+                self._return_to_intralevel()
+    
+    def _return_to_intralevel(self):
+        """Transition back to intralevel scene"""
+        if self.is_transitioning:
+            return
+        
+        self.is_transitioning = True
+        self.prompt_text.enabled = False
+        
+        if self.player:
+            self.player.enabled = False
+        mouse.locked = False
+        
+        try:
+            Audio('assets/audio/door_slide.wav', loop=False, autoplay=True)
+        except:
+            pass
+        
+        self._fade_to_black(duration=1.0, callback=self._transition_to_intralevel_scene)
+    
+    def _fade_to_black(self, duration=1.0, callback=None):
+        """Fade screen to black"""
+        if not self.fade_overlay:
+            if callback:
+                callback()
+            return
+        
+        self.fade_overlay.animate_color(color.rgba(0, 0, 0, 255), duration=duration, curve=curve.in_out_sine)
+        if callback:
+            invoke(callback, delay=duration)
+    
+    def _transition_to_intralevel_scene(self):
+        """Transition to intralevel scene"""
+        if self.player:
+            self.player.enabled = False
+            self.player.gravity = 0
+        
+        mouse.locked = False
+        self.scene_manager.load_scene('intralevel', spawn_at_medical_bay=True)
+    
+    def cleanup(self):
+        """Clean up scene resources"""
+        if self.player:
+            self.player.enabled = False
+        super().cleanup()

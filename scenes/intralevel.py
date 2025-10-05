@@ -35,7 +35,7 @@ class IntralevelScene(BaseScene):
     PLAYER_WALK_SPEED = 5
     PLAYER_RUN_SPEED = 30
     
-    def __init__(self, scene_manager=None):
+    def __init__(self, scene_manager=None, spawn_at_medical_bay=False):
         super().__init__()
         self.scene_manager = scene_manager
         self.player = None
@@ -44,6 +44,10 @@ class IntralevelScene(BaseScene):
         self.game_over_text = None
         self.coordinate_text = None
         self.fade_overlay = None
+        self.medical_bay_door = None
+        self.is_transitioning = False
+        self.interact_distance = 3.0
+        self.spawn_at_medical_bay = spawn_at_medical_bay  # Flag for spawn location
     
     def setup(self):
         """Initialize the intralevel scene"""
@@ -65,10 +69,23 @@ class IntralevelScene(BaseScene):
         self._create_ui()
         
         # Final position and control setup
-        self.player.position = self.PLAYER_START_POSITION
-        self.player.rotation = (0, 0, 0)
+        # Spawn at medical bay door if returning from level2, otherwise default position
+        if self.spawn_at_medical_bay:
+            # Spawn in front of medical bay door (which is at position 2.4, 1, -10)
+            self.player.position = (2.4, 0.5, -7)  # 3 units in front of the door
+            self.player.rotation_y = 180  # Face the door
+        else:
+            self.player.position = self.PLAYER_START_POSITION
+            self.player.rotation = (0, 0, 0)
+        
         self.player.gravity = 1
         self.player.enabled = True
+        
+        # Reset camera to default state (important for scene transitions)
+        camera.position = (0, 0, 0)
+        camera.rotation = (0, 0, 0)
+        camera.clip_plane_near = 0.1
+        camera.clip_plane_far = 1000
         
         # Ensure mouse controls work properly
         mouse.locked = True
@@ -220,8 +237,8 @@ class IntralevelScene(BaseScene):
     
     def _create_doors(self):
         """Create doors"""
-        # Medical bay entrance
-        medical_bay_door = Entity(
+        # Medical bay entrance - INTERACTIVE
+        self.medical_bay_door = Entity(
             model='assets/models/prison_door.glb',
             position=(2.4, 1, -10),
             scale=(1.5, 2, 3),
@@ -230,7 +247,8 @@ class IntralevelScene(BaseScene):
             shader=lit_with_shadows_shader,
             cast_shadows=True
         )
-        self.entities.append(medical_bay_door)
+        self.medical_bay_door.tag = 'medical_door'
+        self.entities.append(self.medical_bay_door)
         
         # Laundry room entrance
         laundry_room_door = Entity(
@@ -330,10 +348,11 @@ class IntralevelScene(BaseScene):
         ambient = AmbientLight(color=color.rgba(150, 150, 150, 255))
         self.entities.append(ambient)
         
+        # Disable shadows to prevent Sky instance conflicts during scene transitions
         directional1 = DirectionalLight(
             position=(10, 10, 10),
             rotation=(45, -45, 0),
-            shadows=True,
+            shadows=False,  # Changed to False to prevent Sky.instances crash
             color=color.white
         )
         self.entities.append(directional1)
@@ -381,6 +400,27 @@ class IntralevelScene(BaseScene):
         )
         self.entities.append(self.game_over_text)
         
+        # Interaction prompt
+        self.prompt_text = Text(
+            text='',
+            origin=(0, 0),
+            scale=1,
+            y=-.45,
+            enabled=False
+        )
+        self.entities.append(self.prompt_text)
+        
+        # Fade overlay for transitions
+        self.fade_overlay = Entity(
+            parent=camera.ui,
+            model='quad',
+            color=color.rgba(0, 0, 0, 0),
+            scale=2,
+            z=-0.9,
+            enabled=True
+        )
+        self.entities.append(self.fade_overlay)
+        
     def update(self):
         """Update scene logic"""
         if not self.is_active:
@@ -397,6 +437,15 @@ class IntralevelScene(BaseScene):
                 self.game_over_text.visible = True
                 self.player.speed = 0
                 self.player.gravity = 0
+        
+        # Check proximity to medical bay door (only if not in game over or transitioning)
+        if not self.game_over and not self.is_transitioning and self.medical_bay_door and self.player:
+            dist = distance(self.player.position, self.medical_bay_door.position)
+            if dist <= self.interact_distance:
+                self.prompt_text.text = 'Press E to enter Medical Bay'
+                self.prompt_text.enabled = True
+            else:
+                self.prompt_text.enabled = False
     
     def input(self, key):
         """Handle input"""
@@ -406,6 +455,12 @@ class IntralevelScene(BaseScene):
         # Restart level on 'R' key press
         if key == 'r' and self.game_over:
             self._restart_level()
+        
+        # Enter medical bay door
+        if key == 'e' and not self.game_over and not self.is_transitioning and self.medical_bay_door:
+            dist = distance(self.player.position, self.medical_bay_door.position)
+            if dist <= self.interact_distance:
+                self._enter_medical_bay()
         
         # Sprint mechanic (Shift key)
         if not self.game_over:
@@ -422,6 +477,43 @@ class IntralevelScene(BaseScene):
         # Reset all officers
         for officer in self.officers:
             officer.reset()
+    
+    def _enter_medical_bay(self):
+        """Transition to medical bay (level2)"""
+        if self.is_transitioning:
+            return
+        
+        self.is_transitioning = True
+        self.prompt_text.enabled = False
+        self.player.enabled = False
+        mouse.locked = False
+        
+        try:
+            Audio('assets/audio/door_slide.wav', loop=False, autoplay=True)
+        except:
+            pass
+        
+        self._fade_to_black(duration=1.0, callback=self._transition_to_level2)
+    
+    def _fade_to_black(self, duration=1.0, callback=None):
+        """Fade screen to black"""
+        if not self.fade_overlay:
+            if callback:
+                callback()
+            return
+        
+        self.fade_overlay.animate_color(color.rgba(0, 0, 0, 255), duration=duration, curve=curve.in_out_sine)
+        if callback:
+            invoke(callback, delay=duration)
+    
+    def _transition_to_level2(self):
+        """Transition to level2 scene"""
+        if self.player:
+            self.player.enabled = False
+            self.player.gravity = 0
+        
+        mouse.locked = False
+        self.scene_manager.load_scene('level2')
     
     def cleanup(self):
         """Clean up scene resources"""
@@ -576,8 +668,17 @@ class PoliceOfficer:
     def destroy(self):
         """Clean up officer resources"""
         if hasattr(self, 'actor') and self.actor:
-            self.actor.cleanup()
+            try:
+                self.actor.cleanup()
+            except:
+                pass
         if hasattr(self, 'holder') and self.holder:
-            self.holder.destroy()
+            try:
+                destroy(self.holder)
+            except:
+                pass
         if hasattr(self, 'catch_zone_indicator') and self.catch_zone_indicator:
-            self.catch_zone_indicator.destroy()
+            try:
+                destroy(self.catch_zone_indicator)
+            except:
+                pass

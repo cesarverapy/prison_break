@@ -17,8 +17,8 @@ class SceneManager:
         """Register a scene class with a name"""
         self.scenes[name] = scene_class
     
-    def load_scene(self, scene_name):
-        """Load a scene by name"""
+    def load_scene(self, scene_name, **kwargs):
+        """Load a scene by name with optional parameters"""
         if scene_name not in self.scenes:
             return
         
@@ -37,10 +37,10 @@ class SceneManager:
             self.current_scene.cleanup()
             self.current_scene = None
         
-        # Create and initialize new scene
+        # Create and initialize new scene with optional parameters
         scene_class = self.scenes[scene_name]
         try:
-            self.current_scene = scene_class(scene_manager=self)
+            self.current_scene = scene_class(scene_manager=self, **kwargs)
         except TypeError:
             self.current_scene = scene_class()
         self.current_scene.setup()

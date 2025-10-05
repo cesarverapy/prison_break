@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from ursina import destroy
 
 
 class BaseScene(ABC):
@@ -24,11 +25,15 @@ class BaseScene(ABC):
     
     def cleanup(self):
         """Clean up scene resources"""
-        # Destroy all entities created by this scene
+        # Set inactive FIRST to stop any ongoing updates
+        self.is_active = False
+        
+        # Destroy all entities created by this scene using global destroy() function
         for entity in self.entities:
-            if hasattr(entity, 'destroy'):
-                entity.destroy()
+            try:
+                destroy(entity)
+            except:
+                pass
         
         self.entities.clear()
         self.systems.clear()
-        self.is_active = False
