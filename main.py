@@ -4,6 +4,7 @@ import random
 from scenes.scene_manager import SceneManager
 from scenes.level1 import Level1Scene
 from scenes.intralevel import IntralevelScene
+from scenes.level2 import Level2Scene
 
 # =========================
 # 1) APP INITIALIZATION
@@ -26,6 +27,7 @@ scene_manager.setup(app)
 # Register available scenes/levels
 scene_manager.register_scene('level1', Level1Scene)
 scene_manager.register_scene('intralevel', IntralevelScene)
+scene_manager.register_scene('level2', Level2Scene)
 
 # =========================
 # 3) GLOBAL CALLBACKS
